@@ -1,0 +1,926 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Markdown Viewer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              ink: "#d9e2ec",
+              steel: "#94a3b8",
+              frost: "#e2e8f0",
+              night: "#0a0f17",
+              pane: "#111827",
+            },
+            fontFamily: {
+              sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+              mono: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "monospace"],
+            },
+          },
+        },
+      };
+    </script>
+    <style type="text/tailwindcss">
+      @layer base {
+        html {
+          @apply bg-night text-ink antialiased;
+        }
+
+        body {
+          @apply min-h-screen bg-[radial-gradient(circle_at_50%_0%,rgba(148,163,184,0.12),transparent_32rem),linear-gradient(180deg,#0a0f17_0%,#070b11_100%)];
+        }
+
+        body.is-editing {
+          @apply h-screen overflow-hidden;
+        }
+
+        ::selection {
+          @apply bg-slate-300 text-slate-950;
+        }
+      }
+
+      @layer components {
+        .file-card {
+          @apply mx-auto max-w-3xl px-5 pt-4 sm:px-8;
+        }
+
+        .file-card-inner {
+          @apply flex min-w-0 items-center justify-between gap-3 rounded border border-slate-800 bg-slate-950/90 px-3 py-2 shadow-2xl shadow-black/25 backdrop-blur;
+        }
+
+        .file-name {
+          @apply min-w-0 flex-1 truncate text-sm font-medium text-frost;
+        }
+
+        .file-actions {
+          @apply flex shrink-0 items-center gap-2;
+        }
+
+        .mode-switch {
+          @apply grid grid-cols-2 rounded border border-slate-800 bg-slate-950 p-0.5;
+        }
+
+        .mode-button {
+          @apply h-8 min-w-12 rounded px-2 text-xs font-medium text-slate-400 outline-none transition hover:text-slate-100 focus-visible:ring-2 focus-visible:ring-slate-300;
+        }
+
+        .mode-button.is-active {
+          @apply bg-slate-200 text-slate-950;
+        }
+
+        .viewer-icon-button {
+          @apply grid h-8 w-8 place-items-center rounded border border-slate-700 bg-slate-900 text-slate-200 outline-none transition hover:border-slate-500 hover:bg-slate-800 focus-visible:ring-2 focus-visible:ring-slate-300;
+        }
+
+        .viewer-icon-button svg {
+          @apply h-4 w-4;
+        }
+
+        .viewer-icon-button.is-active {
+          @apply border-slate-300 text-slate-50;
+        }
+
+        .viewer-icon-button.is-success {
+          @apply border-emerald-500/70 text-emerald-200;
+        }
+
+        .viewer-icon-button.is-error {
+          @apply border-red-500/70 text-red-200;
+        }
+
+        .raw-viewer {
+          @apply mx-auto max-w-3xl whitespace-pre-wrap break-words px-5 py-8 font-mono text-sm leading-6 text-slate-300 sm:px-8;
+        }
+
+        .document-shell.is-editing {
+          @apply grid h-[calc(100vh-4.125rem)] w-full grid-cols-1 grid-rows-2 gap-5 overflow-hidden px-5 py-8 sm:px-8 lg:grid-cols-[minmax(20rem,40vw)_minmax(0,1fr)] lg:grid-rows-1;
+        }
+
+        .document-shell.is-editing .markdown {
+          @apply min-h-0 max-w-none overflow-y-auto overscroll-contain px-0 py-0;
+        }
+
+        .edit-pane {
+          @apply hidden;
+        }
+
+        .document-shell.is-editing .edit-pane {
+          @apply block min-h-0 overflow-hidden;
+        }
+
+        .document-shell.is-editing .editor {
+          @apply h-full min-h-0 resize-none;
+        }
+
+        .editor {
+          @apply min-h-[calc(100vh-11rem)] w-full resize-y rounded border border-slate-800 bg-slate-950/80 p-4 font-mono text-sm leading-6 text-slate-200 outline-none transition placeholder:text-slate-600 focus:border-slate-500 focus:ring-2 focus:ring-slate-500/30;
+        }
+
+        .markdown {
+          @apply mx-auto max-w-3xl px-5 py-10 sm:px-8 sm:py-14;
+        }
+
+        .markdown > * + * {
+          @apply mt-5;
+        }
+
+        .markdown h1 {
+          @apply mb-7 border-b border-slate-700/70 pb-5 text-3xl font-semibold tracking-normal text-frost sm:text-4xl;
+        }
+
+        .markdown h2 {
+          @apply mt-10 border-b border-slate-800 pb-3 text-2xl font-semibold tracking-normal text-frost;
+        }
+
+        .markdown h3 {
+          @apply mt-8 text-xl font-semibold text-frost;
+        }
+
+        .markdown h4,
+        .markdown h5,
+        .markdown h6 {
+          @apply mt-7 text-base font-semibold uppercase tracking-[0.08em] text-steel;
+        }
+
+        .markdown p {
+          @apply leading-7 text-slate-300;
+        }
+
+        .markdown a {
+          @apply text-cyan-200 underline decoration-cyan-200/40 underline-offset-4 hover:text-cyan-100;
+        }
+
+        .markdown strong {
+          @apply font-semibold text-frost;
+        }
+
+        .markdown em {
+          @apply text-slate-200;
+        }
+
+        .markdown del {
+          @apply text-slate-500 decoration-slate-500;
+        }
+
+        .markdown img {
+          @apply my-6 h-auto max-w-full rounded border border-slate-800;
+        }
+
+        .markdown br {
+          content: "";
+        }
+
+        .markdown code {
+          @apply rounded border border-slate-700/80 bg-slate-900/80 px-1.5 py-0.5 font-mono text-[0.9em] text-slate-100;
+        }
+
+        .markdown pre {
+          @apply overflow-x-auto rounded border border-slate-800 bg-slate-950/80 p-4 text-sm leading-6 shadow-2xl shadow-black/20;
+        }
+
+        .markdown pre code {
+          @apply border-0 bg-transparent p-0 text-slate-200;
+        }
+
+        .markdown .block-shell {
+          @apply overflow-hidden rounded border border-slate-800 bg-slate-950/50 shadow-2xl shadow-black/20;
+        }
+
+        .markdown .block-toolbar {
+          @apply flex items-center justify-between gap-3 border-b border-slate-800 bg-slate-950/80 px-3 py-2;
+        }
+
+        .markdown .block-label {
+          @apply text-xs font-medium uppercase tracking-[0.12em] text-slate-500;
+        }
+
+        .markdown .block-actions {
+          @apply flex items-center gap-2;
+        }
+
+        .markdown .block-action {
+          @apply grid h-8 w-8 place-items-center rounded border border-slate-700 bg-slate-900 text-slate-200 outline-none transition hover:border-slate-500 hover:bg-slate-800 focus-visible:ring-2 focus-visible:ring-slate-300;
+        }
+
+        .markdown .block-action svg {
+          @apply h-4 w-4;
+        }
+
+        .markdown .block-action.is-success {
+          @apply border-emerald-500/70 text-emerald-200;
+        }
+
+        .markdown .block-action.is-error {
+          @apply border-red-500/70 text-red-200;
+        }
+
+        .markdown .block-body {
+          @apply overflow-auto;
+        }
+
+        .markdown .block-shell pre {
+          @apply rounded-none border-0 bg-transparent shadow-none;
+        }
+
+        .markdown .block-shell table {
+          @apply min-w-full;
+        }
+
+        .markdown .block-shell.is-expanded {
+          @apply fixed inset-4 z-50 mx-0 max-w-none bg-night;
+        }
+
+        .markdown .block-shell.is-expanded .block-body {
+          @apply max-h-[calc(100vh-4.25rem)] overflow-auto;
+        }
+
+        .markdown blockquote {
+          @apply border-l-2 border-slate-500 pl-5 text-slate-300;
+        }
+
+        .markdown blockquote blockquote {
+          @apply mt-4 border-slate-700;
+        }
+
+        .markdown ul {
+          @apply list-disc space-y-2 pl-6 text-slate-300;
+        }
+
+        .markdown ol {
+          @apply list-decimal space-y-2 pl-6 text-slate-300;
+        }
+
+        .markdown li {
+          @apply leading-7;
+        }
+
+        .markdown .task-list-item {
+          @apply list-none;
+        }
+
+        .markdown .contains-task-list {
+          @apply list-none pl-1;
+        }
+
+        .markdown .task-list-item input[type="checkbox"] {
+          @apply mr-2 h-4 w-4 cursor-pointer align-[-0.125rem] accent-slate-200;
+        }
+
+        .markdown li > ul,
+        .markdown li > ol {
+          @apply mt-2;
+        }
+
+        .markdown hr {
+          @apply my-9 border-slate-800;
+        }
+
+        .markdown table {
+          @apply w-full border-collapse text-left text-sm;
+        }
+
+        .markdown th {
+          @apply border-b border-slate-700 px-3 py-2 font-semibold text-frost;
+        }
+
+        .markdown td {
+          @apply border-b border-slate-800 px-3 py-2 text-slate-300;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main id="empty-state" class="grid min-h-screen place-items-center px-6 py-8">
+      <div class="flex w-full max-w-4xl flex-col items-center gap-5">
+        <div class="w-[66vw] min-w-64 max-w-4xl">
+          <textarea
+            id="new-document-text"
+            class="h-28 w-full resize-y rounded border border-slate-800 bg-slate-950/60 p-3 text-sm leading-6 text-slate-200 outline-none transition placeholder:text-slate-600 focus:border-slate-500 focus:ring-2 focus:ring-slate-500/30"
+            placeholder="Paste Markdown"
+            spellcheck="false"
+          ></textarea>
+          <div class="mt-2 flex justify-end">
+            <button
+              id="new-button"
+              type="button"
+              class="h-9 rounded border border-slate-700 bg-slate-900 px-4 text-sm font-medium text-slate-100 outline-none transition hover:border-slate-500 hover:bg-slate-800 focus-visible:ring-2 focus-visible:ring-slate-300"
+            >
+              New
+            </button>
+          </div>
+        </div>
+        <form id="open-path-form" class="w-[66vw] min-w-64 max-w-4xl" novalidate>
+          <div class="flex flex-col gap-2 sm:flex-row">
+            <label class="sr-only" for="file-path">File path or URL</label>
+            <input
+              id="file-path"
+              class="h-9 min-w-0 flex-1 rounded border border-slate-800 bg-slate-950/60 px-3 text-sm text-slate-200 outline-none transition placeholder:text-slate-600 focus:border-slate-500 focus:ring-2 focus:ring-slate-500/30"
+              type="text"
+              placeholder="File path or URL"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <button
+              id="open-path-button"
+              type="submit"
+              class="h-9 shrink-0 rounded border border-slate-700 bg-slate-900 px-4 text-sm font-medium text-slate-100 outline-none transition hover:border-slate-500 hover:bg-slate-800 focus-visible:ring-2 focus-visible:ring-slate-300 disabled:cursor-wait disabled:opacity-60"
+            >
+              Open file at
+            </button>
+          </div>
+          <p id="file-path-message" class="mt-2 hidden text-xs text-red-300" role="status"></p>
+        </form>
+        <button
+          id="open-zone"
+          type="button"
+          class="flex h-[66vh] min-h-64 w-[66vw] min-w-64 max-w-4xl items-center justify-center rounded border border-dashed border-slate-600 bg-slate-950/30 px-6 text-sm font-medium text-slate-100 outline-none transition hover:border-slate-400 hover:bg-slate-900/70 focus-visible:ring-2 focus-visible:ring-slate-300"
+        >
+          Open
+        </button>
+      </div>
+      <input id="file-input" class="sr-only" type="file" accept=".md,.markdown,text/markdown,text/plain" />
+    </main>
+
+    <header id="file-card" class="file-card hidden">
+      <div class="file-card-inner">
+        <div id="file-name" class="file-name"></div>
+        <div class="file-actions">
+          <div class="mode-switch" role="group" aria-label="View mode">
+            <button id="mode-md" class="mode-button is-active" type="button" data-file-action="mode" data-mode="md" aria-pressed="true">MD</button>
+            <button id="mode-raw" class="mode-button" type="button" data-file-action="mode" data-mode="raw" aria-pressed="false">Raw</button>
+          </div>
+          <button id="file-edit" class="viewer-icon-button" type="button" data-file-action="edit" data-icon="pencil" aria-label="Edit file" title="Edit file"></button>
+          <button id="file-save" class="viewer-icon-button hidden" type="button" data-file-action="save" data-icon="save" aria-label="Save file" title="Save file"></button>
+          <button id="file-copy" class="viewer-icon-button" type="button" data-file-action="copy" data-icon="copy" aria-label="Copy file" title="Copy file"></button>
+        </div>
+      </div>
+    </header>
+
+    <main id="document-shell" class="document-shell hidden">
+      <section id="edit-pane" class="edit-pane">
+        <textarea id="editor" class="editor" spellcheck="false"></textarea>
+      </section>
+      <article id="viewer" class="markdown hidden"></article>
+      <pre id="raw-viewer" class="raw-viewer hidden"></pre>
+    </main>
+
+    <script src="vendor/marked-18.0.5.umd.js"></script>
+    <script src="vendor/dompurify-3.4.11.min.js"></script>
+    <script>
+      const newDocumentText = document.getElementById("new-document-text");
+      const newButton = document.getElementById("new-button");
+      const openPathForm = document.getElementById("open-path-form");
+      const filePathInput = document.getElementById("file-path");
+      const openPathButton = document.getElementById("open-path-button");
+      const filePathMessage = document.getElementById("file-path-message");
+      const openZone = document.getElementById("open-zone");
+      const fileInput = document.getElementById("file-input");
+      const emptyState = document.getElementById("empty-state");
+      const fileCard = document.getElementById("file-card");
+      const fileName = document.getElementById("file-name");
+      const fileEditButton = document.getElementById("file-edit");
+      const fileSaveButton = document.getElementById("file-save");
+      const fileCopyButton = document.getElementById("file-copy");
+      const modeMdButton = document.getElementById("mode-md");
+      const modeRawButton = document.getElementById("mode-raw");
+      const documentShell = document.getElementById("document-shell");
+      const editPane = document.getElementById("edit-pane");
+      const editor = document.getElementById("editor");
+      const viewer = document.getElementById("viewer");
+      const rawViewer = document.getElementById("raw-viewer");
+      let currentFileText = "";
+      let currentFileName = "";
+      let currentFileHandle = null;
+      let currentMode = "md";
+      let isEditing = false;
+      let automaticSaveQueue = Promise.resolve();
+      const buttonFlashState = new WeakMap();
+
+      setIconButton(fileEditButton, "pencil", "Edit file");
+      setIconButton(fileSaveButton, "save", "Save file");
+      setIconButton(fileCopyButton, "copy", "Copy file");
+      newButton.addEventListener("click", createNewDocument);
+      openPathForm.addEventListener("submit", openFileAtPath);
+      editor.addEventListener("input", handleEditorInput);
+      viewer.addEventListener("click", handleViewerClick);
+      viewer.addEventListener("change", handleTaskCheckboxChange);
+      fileCard.addEventListener("click", handleFileCardClick);
+
+      openZone.addEventListener("click", chooseFile);
+      fileInput.addEventListener("change", async () => {
+        const file = fileInput.files && fileInput.files[0];
+        await openFile(file, null);
+      });
+
+      openZone.addEventListener("dragenter", activateDropZone);
+      openZone.addEventListener("dragover", activateDropZone);
+      openZone.addEventListener("dragleave", deactivateDropZone);
+      openZone.addEventListener("drop", async (event) => {
+        event.preventDefault();
+        deactivateDropZone();
+
+        const item = event.dataTransfer.items && event.dataTransfer.items[0];
+        if (item && item.getAsFileSystemHandle) {
+          const handle = await item.getAsFileSystemHandle();
+          if (handle && handle.kind === "file") {
+            await openFileHandle(handle);
+            return;
+          }
+        }
+
+        const file = event.dataTransfer.files && event.dataTransfer.files[0];
+        await openFile(file, null);
+      });
+
+      function activateDropZone(event) {
+        event.preventDefault();
+        openZone.classList.add("border-slate-300", "bg-slate-900/80");
+      }
+
+      function deactivateDropZone() {
+        openZone.classList.remove("border-slate-300", "bg-slate-900/80");
+      }
+
+      async function chooseFile() {
+        if (window.showOpenFilePicker) {
+          try {
+            const [handle] = await window.showOpenFilePicker({
+              types: [
+                {
+                  description: "Markdown",
+                  accept: { "text/markdown": [".md", ".markdown"], "text/plain": [".txt"] },
+                },
+              ],
+            });
+            await openFileHandle(handle);
+            return;
+          } catch (error) {
+            if (error.name === "AbortError") return;
+          }
+        }
+
+        fileInput.click();
+      }
+
+      async function openFileAtPath(event) {
+        event.preventDefault();
+        const path = filePathInput.value.trim();
+
+        if (!path) {
+          setFilePathMessage("Enter a file path or URL.");
+          filePathInput.focus();
+          return;
+        }
+
+        let url;
+        try {
+          url = new URL(path, window.location.href);
+        } catch (_error) {
+          setFilePathMessage("Enter a valid file path or URL.");
+          return;
+        }
+
+        if (url.protocol === "file:" || /^[a-z]:[\\/]/i.test(path) || /^~[\\/]/.test(path) || /^\\\\/.test(path)) {
+          setFilePathMessage("Browsers cannot read a pasted local path directly. Select that file in the picker.");
+          await chooseFile();
+          return;
+        }
+
+        openPathButton.disabled = true;
+        setFilePathMessage("");
+
+        try {
+          const response = await fetch(url.href, { cache: "no-store" });
+          if (!response.ok) throw new Error(`Request failed (${response.status})`);
+
+          const pathParts = url.pathname.split("/").filter(Boolean);
+          const name = decodeURIComponent(pathParts[pathParts.length - 1] || "document.md");
+          await openDocument(name, await response.text(), null);
+        } catch (error) {
+          setFilePathMessage(`Could not open that path: ${error.message}`);
+        } finally {
+          openPathButton.disabled = false;
+        }
+      }
+
+      function setFilePathMessage(message) {
+        filePathMessage.textContent = message;
+        filePathMessage.classList.toggle("hidden", !message);
+      }
+
+      async function openFileHandle(handle) {
+        const file = await handle.getFile();
+        await openDocument(file.name, await file.text(), handle);
+      }
+
+      async function openFile(file, handle) {
+        if (!file) return;
+        await openDocument(file.name, await file.text(), handle);
+      }
+
+      async function createNewDocument() {
+        const name = `file ${new Date().toISOString()}.md`;
+        const text = newDocumentText.value;
+        const handle = await createTemporaryFile(name, text);
+
+        newDocumentText.value = "";
+        await openDocument(name, text, handle);
+        setEditMode(true);
+      }
+
+      async function createTemporaryFile(name, text) {
+        if (!navigator.storage || !navigator.storage.getDirectory) return null;
+
+        try {
+          const root = await navigator.storage.getDirectory();
+          const temp = await root.getDirectoryHandle("tmp", { create: true });
+          const handle = await temp.getFileHandle(name, { create: true });
+          await writeFileHandle(handle, text);
+          return handle;
+        } catch (_error) {
+          return null;
+        }
+      }
+
+      async function openDocument(name, text, handle) {
+        currentFileName = name;
+        currentFileText = text;
+        currentFileHandle = handle;
+        document.title = name;
+        fileName.textContent = name;
+        editor.value = text;
+        renderCurrentDocument();
+        emptyState.classList.add("hidden");
+        fileCard.classList.remove("hidden");
+        documentShell.classList.remove("hidden");
+        setEditMode(false);
+        setViewMode("md");
+        window.scrollTo({ top: 0 });
+      }
+
+      function renderCurrentDocument() {
+        rawViewer.textContent = currentFileText;
+
+        if (!window.marked || !window.DOMPurify) {
+          viewer.replaceChildren(createDependencyError());
+          return;
+        }
+
+        try {
+          const html = window.marked.parse(currentFileText, {
+            gfm: true,
+            breaks: false,
+            pedantic: false,
+          });
+          viewer.innerHTML = window.DOMPurify.sanitize(html, {
+            USE_PROFILES: { html: true },
+          });
+          enhanceRenderedMarkdown();
+        } catch (error) {
+          viewer.replaceChildren(createDependencyError(error));
+        }
+      }
+
+      function createDependencyError(error) {
+        const message = document.createElement("p");
+        message.className = "rounded border border-red-900 bg-red-950/40 p-4 text-red-200";
+        message.setAttribute("role", "alert");
+        message.textContent = error
+          ? `Markdown could not be rendered: ${error.message}`
+          : "Markdown dependencies failed to load. Reload the page and check that the vendor files are available.";
+        return message;
+      }
+
+      function enhanceRenderedMarkdown() {
+        viewer.querySelectorAll("a").forEach((link) => {
+          link.target = "_blank";
+          link.rel = "noreferrer";
+        });
+
+        viewer.querySelectorAll("input[type='checkbox']").forEach((checkbox, taskIndex) => {
+          checkbox.disabled = false;
+          checkbox.dataset.taskIndex = String(taskIndex);
+          checkbox.setAttribute("aria-label", checkbox.checked ? "Mark task incomplete" : "Mark task complete");
+        });
+
+        viewer.querySelectorAll("pre").forEach((pre) => {
+          const code = pre.querySelector(":scope > code");
+          const languageClass = code
+            ? Array.from(code.classList).find((className) => className.startsWith("language-"))
+            : "";
+          const language = languageClass ? languageClass.slice("language-".length) : "";
+          wrapRenderedBlock(pre, language || "Code", "code");
+        });
+
+        viewer.querySelectorAll("table").forEach((table) => {
+          wrapRenderedBlock(table, "Table", "table");
+        });
+      }
+
+      function wrapRenderedBlock(block, label, kind) {
+        const shell = document.createElement("figure");
+        shell.className = "block-shell";
+        shell.dataset.kind = kind;
+
+        const toolbar = document.createElement("figcaption");
+        toolbar.className = "block-toolbar";
+        const blockLabel = document.createElement("span");
+        blockLabel.className = "block-label";
+        blockLabel.textContent = label;
+        const actions = document.createElement("span");
+        actions.className = "block-actions";
+        actions.append(createBlockButton("expand", "Expand"), createBlockButton("copy", "Copy"));
+        toolbar.append(blockLabel, actions);
+
+        const body = document.createElement("div");
+        body.className = "block-body";
+        block.before(shell);
+        body.append(block);
+        shell.append(toolbar, body);
+      }
+
+      function createBlockButton(action, label) {
+        const button = document.createElement("button");
+        button.className = "block-action";
+        button.type = "button";
+        button.dataset.action = action;
+        if (action === "expand") button.setAttribute("aria-expanded", "false");
+        setIconButton(button, action, label);
+        return button;
+      }
+
+      async function handleFileCardClick(event) {
+        const button = event.target.closest ? event.target.closest("button[data-file-action]") : null;
+        if (!button || !fileCard.contains(button)) return;
+
+        if (button.dataset.fileAction === "mode") {
+          if (button.dataset.mode === "raw") setEditMode(false);
+          setViewMode(button.dataset.mode);
+          return;
+        }
+
+        if (button.dataset.fileAction === "edit") {
+          setEditMode(!isEditing);
+          return;
+        }
+
+        if (button.dataset.fileAction === "save") {
+          try {
+            await saveCurrentFile();
+            flashButton(button, "check", "Saved", "is-success");
+          } catch (_error) {
+            flashButton(button, "x", "Save failed", "is-error");
+          }
+          return;
+        }
+
+        if (button.dataset.fileAction === "copy") {
+          try {
+            await copyText(currentFileText);
+            flashButton(button, "check", "Copied", "is-success");
+          } catch (_error) {
+            flashButton(button, "x", "Copy failed", "is-error");
+          }
+        }
+      }
+
+      function handleEditorInput() {
+        currentFileText = editor.value;
+        renderCurrentDocument();
+      }
+
+      async function handleTaskCheckboxChange(event) {
+        const checkbox = event.target.closest ? event.target.closest("input[data-task-index]") : null;
+        if (!checkbox || !viewer.contains(checkbox)) return;
+
+        const taskIndex = Number(checkbox.dataset.taskIndex);
+        const updatedText = updateTaskInMarkdown(currentFileText, taskIndex, checkbox.checked);
+        if (updatedText === null) {
+          checkbox.checked = !checkbox.checked;
+          return;
+        }
+
+        const selectionStart = editor.selectionStart;
+        const selectionEnd = editor.selectionEnd;
+        const editorScrollTop = editor.scrollTop;
+        currentFileText = updatedText;
+        editor.value = updatedText;
+        editor.setSelectionRange(selectionStart, selectionEnd);
+        editor.scrollTop = editorScrollTop;
+        rawViewer.textContent = updatedText;
+
+        const saveOperation = automaticSaveQueue.catch(() => {}).then(() => saveCurrentFile());
+        automaticSaveQueue = saveOperation;
+
+        try {
+          await saveOperation;
+          flashButton(fileEditButton, "check", "Saved", "is-success");
+        } catch (_error) {
+          flashButton(fileEditButton, "x", "Save failed", "is-error");
+        }
+      }
+
+      function updateTaskInMarkdown(source, targetIndex, checked) {
+        if (!Number.isInteger(targetIndex) || targetIndex < 0) return null;
+
+        const parts = source.split(/(\r\n|\n|\r)/);
+        const taskPattern = /^(\s*(?:>\s*)*(?:[-*+]|\d+\.)\s+)\[([ xX])\]/;
+        let taskIndex = 0;
+        let codeFence = null;
+
+        for (let index = 0; index < parts.length; index += 2) {
+          const line = parts[index];
+          const structuralLine = line.replace(/^\s*(?:>\s*)+/, "");
+          const fence = /^ {0,3}(`{3,}|~{3,})/.exec(structuralLine);
+
+          if (fence && (!codeFence || (fence[1][0] === codeFence.character && fence[1].length >= codeFence.length))) {
+            codeFence = codeFence ? null : { character: fence[1][0], length: fence[1].length };
+            continue;
+          }
+
+          if (codeFence || !taskPattern.test(line)) continue;
+
+          if (taskIndex === targetIndex) {
+            parts[index] = line.replace(taskPattern, `$1[${checked ? "x" : " "}]`);
+            return parts.join("");
+          }
+
+          taskIndex += 1;
+        }
+
+        return null;
+      }
+
+      function setEditMode(enabled) {
+        isEditing = Boolean(enabled);
+        if (isEditing) setViewMode("md");
+
+        document.body.classList.toggle("is-editing", isEditing);
+        documentShell.classList.toggle("is-editing", isEditing);
+        editPane.classList.toggle("hidden", !isEditing);
+        fileSaveButton.classList.toggle("hidden", !isEditing);
+        fileEditButton.classList.toggle("is-active", isEditing);
+        fileEditButton.setAttribute("aria-pressed", String(isEditing));
+      }
+
+      async function saveCurrentFile() {
+        if (!currentFileHandle && window.showSaveFilePicker) {
+          currentFileHandle = await window.showSaveFilePicker({
+            suggestedName: currentFileName || `file ${new Date().toISOString()}.md`,
+            types: [
+              {
+                description: "Markdown",
+                accept: { "text/markdown": [".md", ".markdown"], "text/plain": [".txt"] },
+              },
+            ],
+          });
+        }
+
+        if (currentFileHandle) {
+          await writeFileHandle(currentFileHandle, currentFileText);
+          currentFileName = currentFileHandle.name || currentFileName;
+          fileName.textContent = currentFileName;
+          document.title = currentFileName;
+          return;
+        }
+
+        downloadFile(currentFileName || `file ${new Date().toISOString()}.md`, currentFileText);
+      }
+
+      async function writeFileHandle(handle, text) {
+        if (handle.queryPermission && handle.requestPermission) {
+          const permission = { mode: "readwrite" };
+          const existing = await handle.queryPermission(permission);
+          if (existing !== "granted") {
+            const requested = await handle.requestPermission(permission);
+            if (requested !== "granted") throw new Error("Write permission denied");
+          }
+        }
+
+        const writable = await handle.createWritable();
+        await writable.write(text);
+        await writable.close();
+      }
+
+      function downloadFile(name, text) {
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(new Blob([text], { type: "text/markdown" }));
+        link.download = name;
+        link.click();
+        URL.revokeObjectURL(link.href);
+      }
+
+      function setViewMode(mode) {
+        currentMode = mode === "raw" ? "raw" : "md";
+        const rawActive = currentMode === "raw";
+
+        viewer.classList.toggle("hidden", rawActive);
+        rawViewer.classList.toggle("hidden", !rawActive);
+        modeMdButton.classList.toggle("is-active", !rawActive);
+        modeRawButton.classList.toggle("is-active", rawActive);
+        modeMdButton.setAttribute("aria-pressed", String(!rawActive));
+        modeRawButton.setAttribute("aria-pressed", String(rawActive));
+      }
+
+      async function handleViewerClick(event) {
+        const button = event.target.closest ? event.target.closest("button[data-action]") : null;
+        if (!button || !viewer.contains(button)) return;
+
+        const shell = button.closest(".block-shell");
+        if (!shell) return;
+
+        if (button.dataset.action === "expand") {
+          const expanded = shell.classList.toggle("is-expanded");
+          setIconButton(button, expanded ? "minimize" : "expand", expanded ? "Collapse" : "Expand");
+          button.setAttribute("aria-expanded", String(expanded));
+          return;
+        }
+
+        if (button.dataset.action === "copy") {
+          try {
+            await copyText(getBlockText(shell));
+            flashButton(button, "check", "Copied", "is-success");
+          } catch (_error) {
+            flashButton(button, "x", "Copy failed", "is-error");
+          }
+        }
+      }
+
+      function getBlockText(shell) {
+        if (shell.dataset.kind === "table") return getTableText(shell);
+
+        const code = shell.querySelector("pre code");
+        return code ? code.textContent : "";
+      }
+
+      function getTableText(shell) {
+        return Array.from(shell.querySelectorAll("tr"))
+          .map((row) => Array.from(row.children).map((cell) => cell.textContent.trim()).join("\t"))
+          .join("\n");
+      }
+
+      async function copyText(text) {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+          return;
+        }
+
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        textArea.setAttribute("readonly", "");
+        textArea.style.position = "fixed";
+        textArea.style.opacity = "0";
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand("copy");
+        textArea.remove();
+      }
+
+      function flashButton(button, icon, label, className) {
+        const activeFlash = buttonFlashState.get(button);
+        const previousIcon = activeFlash ? activeFlash.previousIcon : button.dataset.icon;
+        const previousLabel = activeFlash ? activeFlash.previousLabel : button.getAttribute("aria-label") || "";
+
+        if (activeFlash) {
+          window.clearTimeout(activeFlash.timeout);
+          button.classList.remove(activeFlash.className);
+        }
+
+        setIconButton(button, icon, label);
+        button.classList.add(className);
+        const timeout = window.setTimeout(() => {
+          setIconButton(button, previousIcon, previousLabel);
+          button.classList.remove(className);
+          buttonFlashState.delete(button);
+        }, 900);
+
+        buttonFlashState.set(button, { previousIcon, previousLabel, className, timeout });
+      }
+
+      function setIconButton(button, icon, label) {
+        button.dataset.icon = icon;
+        button.innerHTML = renderIcon(icon);
+        button.setAttribute("aria-label", label);
+        button.setAttribute("title", label);
+      }
+
+      function renderIcon(name) {
+        const icons = {
+          expand: `<polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" x2="14" y1="3" y2="10"></line><line x1="3" x2="10" y1="21" y2="14"></line>`,
+          minimize: `<polyline points="4 14 10 14 10 20"></polyline><polyline points="20 10 14 10 14 4"></polyline><line x1="14" x2="21" y1="10" y2="3"></line><line x1="3" x2="10" y1="21" y2="14"></line>`,
+          copy: `<rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>`,
+          pencil: `<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"></path><path d="m15 5 4 4"></path>`,
+          save: `<path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"></path><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7"></path><path d="M7 3v4a1 1 0 0 0 1 1h7"></path>`,
+          check: `<path d="M20 6 9 17l-5-5"></path>`,
+          x: `<path d="M18 6 6 18"></path><path d="m6 6 12 12"></path>`,
+        };
+
+        return `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icons[name] || icons.copy}</svg>`;
+      }
+    </script>
+  </body>
+</html>
